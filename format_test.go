@@ -10,7 +10,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sync"
 	"testing"
 )
@@ -33,9 +32,8 @@ func TestFormatting(t *testing.T) {
 				t.Errorf("unable to read %s: %v", path, err)
 				return
 			}
-			if runtime.GOOS == "windows" {
-				src = bytes.ReplaceAll(src, []byte{'\r', '\n'}, []byte{'\n'})
-			}
+			src = bytes.ReplaceAll(src, []byte{'\r', '\n'}, []byte{'\n'})
+			src = bytes.ReplaceAll(src, []byte{'\r'}, []byte{'\n'})
 			formatted, err := format.Source(src)
 			if err != nil {
 				t.Errorf("unable to format %s: %v", path, err)

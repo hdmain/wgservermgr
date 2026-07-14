@@ -10,9 +10,12 @@ import (
 
 const pollInterval = 3 * time.Second
 
+var defaultRegistry = NewRegistry()
+
 type Monitor struct {
 	pm          *peers.Manager
 	st          *store.Store
+	registry    *Registry
 	logger      *device.Logger
 	idleTimeout time.Duration
 }
@@ -24,10 +27,15 @@ func Start(pm *peers.Manager, st *store.Store, logger *device.Logger, idleSecond
 	m := &Monitor{
 		pm:          pm,
 		st:          st,
+		registry:    defaultRegistry,
 		logger:      logger,
 		idleTimeout: time.Duration(idleSeconds) * time.Second,
 	}
 	go m.run()
+}
+
+func ClearUser(userID string) {
+	defaultRegistry.Clear(userID)
 }
 
 func (m *Monitor) run() {
@@ -71,53 +79,49 @@ func (m *Monitor) handleUser(user *store.User, info peers.PeerInfo) {
 	currentEndpoint := info.Endpoint
 	hasRecentHS := info.HasRecentHandshake(m.idleTimeout)
 
-	if user.LockedEndpoint == "" {
+	lockedEndpoint, lockedLastActive, hasLock := m.registry.Get(user.ID)
+
+	if !hasLock || lockedEndpoint == "" {
 		if hasRecentHS && currentEndpoint != "" {
-			if err := m.st.SetSessionLock(user.ID, currentEndpoint, info.LastHandshake()); err != nil {
-				m.logger.Errorf("Session monitor: lock %s: %v", user.Name, err)
-			} else {
-				m.logger.Verbosef("Session locked for %s at %s", user.Name, currentEndpoint)
-			}
+			m.registry.Set(user.ID, currentEndpoint, info.LastHandshake())
+			m.logger.Verbosef("Session locked for %s", user.Name)
 		}
 		return
 	}
 
-	if endpointsEqual(currentEndpoint, user.LockedEndpoint) {
+	if endpointsEqual(currentEndpoint, lockedEndpoint) {
 		if hasRecentHS {
 			hs := info.LastHandshake()
-			if user.LockedLastActiveAt.IsZero() || hs.After(user.LockedLastActiveAt) {
-				_ = m.st.SetSessionLock(user.ID, user.LockedEndpoint, hs)
+			if lockedLastActive.IsZero() || hs.After(lockedLastActive) {
+				m.registry.Set(user.ID, lockedEndpoint, hs)
 			}
 			return
 		}
-		lockActive := !user.LockedLastActiveAt.IsZero() && time.Since(user.LockedLastActiveAt) <= m.idleTimeout
+		lockActive := !lockedLastActive.IsZero() && time.Since(lockedLastActive) <= m.idleTimeout
 		if !lockActive {
-			_ = m.st.ClearSessionLock(user.ID)
+			m.registry.Clear(user.ID)
 		}
 		return
 	}
 
-	lockActive := !user.LockedLastActiveAt.IsZero() && time.Since(user.LockedLastActiveAt) <= m.idleTimeout
+	lockActive := !lockedLastActive.IsZero() && time.Since(lockedLastActive) <= m.idleTimeout
 	if lockActive && currentEndpoint != "" {
-		if err := m.pm.SetPeerEndpoint(user.PublicKey, user.LockedEndpoint); err != nil {
+		if err := m.pm.SetPeerEndpoint(user.PublicKey, lockedEndpoint); err != nil {
 			m.logger.Errorf("Session monitor: revert endpoint for %s: %v", user.Name, err)
 			return
 		}
-		m.logger.Verbosef("Blocked second device for %s (locked: %s, tried: %s)", user.Name, user.LockedEndpoint, currentEndpoint)
+		m.logger.Verbosef("Blocked second device for %s", user.Name)
 		return
 	}
 
 	if hasRecentHS && currentEndpoint != "" {
-		if err := m.st.SetSessionLock(user.ID, currentEndpoint, info.LastHandshake()); err != nil {
-			m.logger.Errorf("Session monitor: relock %s: %v", user.Name, err)
-		} else {
-			m.logger.Verbosef("Session moved for %s to %s", user.Name, currentEndpoint)
-		}
+		m.registry.Set(user.ID, currentEndpoint, info.LastHandshake())
+		m.logger.Verbosef("Session moved for %s", user.Name)
 		return
 	}
 
-	if !lockActive && user.LockedEndpoint != "" {
-		_ = m.st.ClearSessionLock(user.ID)
+	if !lockActive {
+		m.registry.Clear(user.ID)
 	}
 }
 

@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"net/netip"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -60,22 +59,7 @@ func (s *Store) migrate() error {
 			server_ip TEXT NOT NULL
 		);
 	`)
-	if err != nil {
-		return err
-	}
-	return s.ensureUserSessionColumns()
-}
-
-func (s *Store) ensureUserSessionColumns() error {
-	for _, stmt := range []string{
-		`ALTER TABLE users ADD COLUMN locked_endpoint TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE users ADD COLUMN locked_last_active_at TEXT NOT NULL DEFAULT ''`,
-	} {
-		if _, err := s.db.Exec(stmt); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
-			return err
-		}
-	}
-	return nil
+	return err
 }
 
 func (s *Store) Create(input CreateUserInput, publicKey, privateKey string) (*User, error) {
@@ -113,8 +97,7 @@ func (s *Store) Create(input CreateUserInput, publicKey, privateKey string) (*Us
 
 func (s *Store) List() ([]User, error) {
 	rows, err := s.db.Query(`
-		SELECT id, name, public_key, private_key, assigned_ip, bandwidth_mbps, tc_class_id, enabled,
-			locked_endpoint, locked_last_active_at, created_at, updated_at
+		SELECT id, name, public_key, private_key, assigned_ip, bandwidth_mbps, tc_class_id, enabled, created_at, updated_at
 		FROM users ORDER BY created_at ASC`)
 	if err != nil {
 		return nil, err
@@ -134,8 +117,7 @@ func (s *Store) List() ([]User, error) {
 
 func (s *Store) Get(id string) (*User, error) {
 	row := s.db.QueryRow(`
-		SELECT id, name, public_key, private_key, assigned_ip, bandwidth_mbps, tc_class_id, enabled,
-			locked_endpoint, locked_last_active_at, created_at, updated_at
+		SELECT id, name, public_key, private_key, assigned_ip, bandwidth_mbps, tc_class_id, enabled, created_at, updated_at
 		FROM users WHERE id = ?`, id)
 	return scanUser(row)
 }
@@ -228,25 +210,15 @@ type rowScanner interface {
 func scanUser(row rowScanner) (*User, error) {
 	var user User
 	var enabled int
-	var lockedLastActiveAt, createdAt, updatedAt string
+	var createdAt, updatedAt string
 	err := row.Scan(
 		&user.ID, &user.Name, &user.PublicKey, &user.PrivateKey, &user.AssignedIP,
-		&user.BandwidthMbps, &user.TCClassID, &enabled,
-		&user.LockedEndpoint, &lockedLastActiveAt, &createdAt, &updatedAt,
+		&user.BandwidthMbps, &user.TCClassID, &enabled, &createdAt, &updatedAt,
 	)
 	if err != nil {
 		return nil, err
 	}
 	user.Enabled = enabled == 1
-	if lockedLastActiveAt != "" {
-		user.LockedLastActiveAt, err = time.Parse(time.RFC3339Nano, lockedLastActiveAt)
-		if err != nil {
-			user.LockedLastActiveAt, err = time.Parse(time.RFC3339, lockedLastActiveAt)
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
 	user.CreatedAt, err = time.Parse(time.RFC3339, createdAt)
 	if err != nil {
 		return nil, err

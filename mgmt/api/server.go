@@ -9,6 +9,7 @@ import (
 	"golang.zx2c4.com/wireguard/mgmt/config"
 	"golang.zx2c4.com/wireguard/mgmt/peers"
 	"golang.zx2c4.com/wireguard/mgmt/ratelimit"
+	"golang.zx2c4.com/wireguard/mgmt/session"
 	"golang.zx2c4.com/wireguard/mgmt/store"
 )
 
@@ -212,6 +213,7 @@ func (s *Server) updateUser(c *gin.Context) {
 				return
 			}
 		} else {
+			session.ClearUser(user.ID)
 			_ = s.limiter.Remove(user)
 			if err := s.peers.RemovePeer(user.PublicKey); err != nil {
 				c.JSON(http.StatusBadGateway, gin.H{"error": "failed to disable peer: " + err.Error()})
@@ -230,6 +232,7 @@ func (s *Server) deleteUser(c *gin.Context) {
 		return
 	}
 
+	session.ClearUser(user.ID)
 	_ = s.limiter.Remove(user)
 	if err := s.peers.RemovePeer(user.PublicKey); err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to remove wireguard peer: " + err.Error()})

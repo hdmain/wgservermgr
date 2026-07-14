@@ -10,10 +10,8 @@ type User struct {
 	AssignedIP         string    `json:"assigned_ip"`
 	BandwidthMbps      int       `json:"bandwidth_mbps"`
 	TCClassID          int       `json:"-"`
-	Enabled            bool      `json:"enabled"`
-	LockedEndpoint     string    `json:"locked_endpoint,omitempty"`
-	LockedLastActiveAt time.Time `json:"locked_last_active_at,omitempty"`
-	CreatedAt          time.Time `json:"created_at"`
+	Enabled       bool      `json:"enabled"`
+	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt          time.Time `json:"updated_at"`
 }
 

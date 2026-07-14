@@ -98,22 +98,52 @@ Disable the management API:
 sudo WG_API=0 ./wireguard-go -f wg0
 ```
 
+## Configuration
+
+Settings are loaded from `config.json` in the working directory (override with `WG_CONFIG`).
+
+If the file is missing, it is created automatically with defaults and a random `secret_key`.
+If `secret_key` is empty, a new one is generated and saved.
+
+Example (`config.json.example`):
+
+```json
+{
+  "api_enabled": true,
+  "api_port": 8080,
+  "secret_key": "",
+  "listen_port": 51820,
+  "subnet": "10.8.0.0/24",
+  "server_ip": "10.8.0.1",
+  "server_endpoint": "",
+  "dns": "1.1.1.1",
+  "out_interface": "",
+  "keepalive_interval": 25,
+  "db_path": "wireguard-wg0.db",
+  "log_level": "verbose"
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `api_enabled` | Enable management API |
+| `api_port` | HTTP API port |
+| `secret_key` | API auth key (`X-API-Key`); auto-generated if empty |
+| `listen_port` | WireGuard UDP port |
+| `subnet` | VPN address pool |
+| `server_ip` | Server address inside the VPN |
+| `server_endpoint` | Public `host:port` for client configs (auto-detected if empty) |
+| `dns` | DNS written into client configs |
+| `out_interface` | NIC used for NAT (auto-detected if empty) |
+| `keepalive_interval` | Client persistent keepalive seconds |
+| `db_path` | SQLite database path |
+| `log_level` | Suggested log level (`verbose`, `error`, …) |
+
+Environment variables still override matching `config.json` fields when set. Do not commit real `config.json` files (contains secrets).
+
 ## Environment variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `WG_API` | enabled | Set to `0` to disable the API |
-| `API_PORT` | `8080` | HTTP API listen port |
-| `API_KEY` | empty | Optional API key (`X-API-Key` header) |
-| `WG_LISTEN_PORT` | `51820` | WireGuard UDP listen port |
-| `WG_SUBNET` | `10.8.0.0/24` | VPN address pool |
-| `WG_SERVER_IP` | `10.8.0.1` | Server address inside the VPN subnet |
-| `WG_SERVER_ENDPOINT` | auto | Public `host:port` written into client configs |
-| `WG_DNS` | `1.1.1.1` | DNS servers written into client configs |
-| `WG_OUT_INTERFACE` | auto | Outbound NIC used for NAT (e.g. `ens3`, `eth0`) |
-| `WG_KEEPALIVE_INTERVAL` | `25` | Client persistent keepalive (seconds) |
-| `DB_PATH` | `wireguard-<iface>.db` | SQLite database path |
-| `LOG_LEVEL` | `error` | `verbose` / `debug` / `error` / `silent` |
+Environment variables are optional overrides. Prefer `config.json` for day-to-day settings.
 
 ## Management API
 

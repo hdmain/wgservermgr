@@ -57,6 +57,9 @@ func Start(dev *device.Device, iface string, logger *device.Logger) error {
 
 	logger.Errorf("Management API listening on http://0.0.0.0:%d", cfg.APIPort)
 	fmt.Fprintf(os.Stderr, "wireguard-go: management API listening on :%d\n", cfg.APIPort)
+	if cfg.APIKey != "" {
+		fmt.Fprintf(os.Stderr, "wireguard-go: use header X-API-Key: %s\n", cfg.APIKey)
+	}
 	server := api.New(cfg, st, pm, limiter)
 	return server.Run()
 }

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"golang.zx2c4.com/wireguard/device"
@@ -61,7 +62,7 @@ func ConfigureServer(dev *device.Device, iface string, cfg *config.Config, st *s
 		return fmt.Errorf("configure interface network: %w", err)
 	}
 
-	if err := configureRouting(iface, cfg.Subnet); err != nil {
+	if err := configureRouting(iface, cfg.Subnet, cfg.OutInterface, cfg.ListenPort); err != nil {
 		logger.Errorf("Routing setup warning: %v", err)
 	}
 
@@ -92,11 +93,10 @@ func configureInterfaceNetwork(iface string, prefix netip.Prefix, serverIP strin
 	return err
 }
 
-func configureRouting(wgIface, subnet string) error {
+func configureRouting(wgIface, subnet, outIface string, listenPort int) error {
 	_ = exec.Command("sysctl", "-w", "net.ipv4.ip_forward=1").Run()
 	_ = exec.Command("sysctl", "-w", "net.ipv6.conf.all.forwarding=1").Run()
 
-	outIface := os.Getenv("WG_OUT_INTERFACE")
 	if outIface == "" {
 		var err error
 		outIface, err = detectOutboundInterface()
@@ -105,9 +105,9 @@ func configureRouting(wgIface, subnet string) error {
 		}
 	}
 
-	listenPort := os.Getenv("WG_LISTEN_PORT")
-	if listenPort == "" {
-		listenPort = "51820"
+	port := strconv.Itoa(listenPort)
+	if listenPort <= 0 {
+		port = "51820"
 	}
 
 	var lastErr error
@@ -119,7 +119,7 @@ func configureRouting(wgIface, subnet string) error {
 			lastErr = err
 			continue
 		}
-		_ = openListenPort(listenPort)
+		_ = openListenPort(port)
 		fmt.Fprintf(os.Stderr, "wireguard-go: NAT enabled (%s -> %s)\n", subnet, outIface)
 		return nil
 	}

@@ -1,0 +1,14 @@
+{
+  "api_enabled": true,
+  "api_port": 8080,
+  "secret_key": "",
+  "listen_port": 51820,
+  "subnet": "10.8.0.0/24",
+  "server_ip": "10.8.0.1",
+  "server_endpoint": "",
+  "dns": "1.1.1.1",
+  "out_interface": "",
+  "keepalive_interval": 25,
+  "db_path": "wireguard-wg0.db",
+  "log_level": "verbose"
+}

@@ -1,0 +1,19 @@
+## Usage
+
+```
+$ wireguard-go [-f|--foreground] INTERFACE-NAME
+$ wireguard-go --version
+```
+
+### Management API (enabled by default)
+
+  WG_API=0                         Disable user management API
+  WG_SERVER_ENDPOINT=host:port     Public endpoint for client configs (auto-detected if omitted)
+  WG_LISTEN_PORT=51820             WireGuard listen port
+  API_PORT=8080                    API listen port
+  API_KEY=secret                   Optional API authentication
+  LOG_LEVEL=verbose                Recommended when running with -f
+
+### Example
+
+  sudo LOG_LEVEL=verbose ./wireguard-go -f wg0

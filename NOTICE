@@ -1,0 +1,11 @@
+# NOTICE
+
+This repository contains:
+
+1. **Upstream wireguard-go** — the userspace WireGuard implementation by WireGuard LLC  
+   Source: https://git.zx2c4.com/wireguard-go  
+   License: MIT (see `LICENSE`)
+
+2. **Management extensions** — HTTP API, SQLite store, auto-setup (NAT/routing), and Linux bandwidth limiting under `mgmt/` and related hooks in `main.go`.
+
+These extensions are intended for VPN hosting / provisioning use cases and are not part of the official WireGuard project.

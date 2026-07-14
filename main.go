@@ -18,6 +18,9 @@ import (
 	"golang.zx2c4.com/wireguard/conn"
 	"golang.zx2c4.com/wireguard/device"
 	"golang.zx2c4.com/wireguard/ipc"
+	"golang.zx2c4.com/wireguard/mgmt"
+	mgmtconfig "golang.zx2c4.com/wireguard/mgmt/config"
+	"golang.zx2c4.com/wireguard/mgmt/setup"
 	"golang.zx2c4.com/wireguard/tun"
 )
 
@@ -33,7 +36,16 @@ const (
 )
 
 func printUsage() {
-	fmt.Printf("Usage: %s [-f/--foreground] INTERFACE-NAME\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "Usage: %s [-f/--foreground] INTERFACE-NAME\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "Management API is enabled by default. Set WG_API=0 to disable.")
+	fmt.Fprintln(os.Stderr, "  WG_SERVER_ENDPOINT=host:port     Optional (auto-detected if omitted)")
+	fmt.Fprintln(os.Stderr, "  WG_LISTEN_PORT=51820             WireGuard UDP listen port")
+	fmt.Fprintln(os.Stderr, "  API_PORT=8080                    HTTP API listen port")
+	fmt.Fprintln(os.Stderr, "  API_KEY=secret                   Optional API authentication")
+	fmt.Fprintln(os.Stderr, "  LOG_LEVEL=verbose                Recommended when using -f")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintln(os.Stderr, "  sudo LOG_LEVEL=verbose ./wireguard-go -f wg0")
 }
 
 func warning() {
@@ -59,7 +71,7 @@ func warning() {
 
 func main() {
 	if len(os.Args) == 2 && os.Args[1] == "--version" {
-		fmt.Printf("wireguard-go v%s\n\nUserspace WireGuard daemon for %s-%s.\nInformation available at https://www.wireguard.com.\nCopyright (C) Jason A. Donenfeld <Jason@zx2c4.com>.\n", Version, runtime.GOOS, runtime.GOARCH)
+		fmt.Printf("wireguard-go v%s (management API)\n\nUserspace WireGuard daemon for %s-%s.\nInformation available at https://www.wireguard.com.\nCopyright (C) Jason A. Donenfeld <Jason@zx2c4.com>.\n", Version, runtime.GOOS, runtime.GOARCH)
 		return
 	}
 
@@ -114,6 +126,9 @@ func main() {
 	tdev, err := func() (tun.Device, error) {
 		tunFdStr := os.Getenv(ENV_WG_TUN_FD)
 		if tunFdStr == "" {
+			if mgmtconfig.Enabled() {
+				setup.PrepareInterface(interfaceName)
+			}
 			return tun.CreateTUN(interfaceName, device.DefaultMTU)
 		}
 
@@ -177,6 +192,14 @@ func main() {
 	// daemonize the process
 
 	if !foreground {
+		apiEnabled := mgmtconfig.Enabled()
+		if apiEnabled {
+			port := os.Getenv("API_PORT")
+			if port == "" {
+				port = "8080"
+			}
+			fmt.Fprintf(os.Stderr, "wireguard-go: daemonizing with management API on :%s (use -f for foreground)\n", port)
+		}
 		env := os.Environ()
 		env = append(env, fmt.Sprintf("%s=3", ENV_WG_TUN_FD))
 		env = append(env, fmt.Sprintf("%s=4", ENV_WG_UAPI_FD))
@@ -185,6 +208,10 @@ func main() {
 		if os.Getenv("LOG_LEVEL") != "" && logLevel != device.LogLevelSilent {
 			files[0], _ = os.Open(os.DevNull)
 			files[1] = os.Stdout
+			files[2] = os.Stderr
+		} else if apiEnabled {
+			files[0], _ = os.Open(os.DevNull)
+			files[1], _ = os.Open(os.DevNull)
 			files[2] = os.Stderr
 		} else {
 			files[0], _ = os.Open(os.DevNull)
@@ -247,6 +274,12 @@ func main() {
 	}()
 
 	logger.Verbosef("UAPI listener started")
+
+	go func() {
+		if err := mgmt.Start(device, interfaceName, logger); err != nil {
+			errs <- err
+		}
+	}()
 
 	// wait for program to terminate
 

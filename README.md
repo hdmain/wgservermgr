@@ -1,5 +1,11 @@
 # wireguard-go (with Management API)
 
+[![CI](https://github.com/hdmain/wgservermgr/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/hdmain/wgservermgr/actions/workflows/ci.yml)
+[![Release](https://github.com/hdmain/wgservermgr/actions/workflows/release.yml/badge.svg)](https://github.com/hdmain/wgservermgr/releases)
+[![Go 1.23+](https://img.shields.io/badge/Go-1.23+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS-lightgrey)](#platforms)
+
 Userspace [WireGuard](https://www.wireguard.com/) implementation in Go, extended with a built-in HTTP management API for creating users (peers), issuing client configs, and applying per-user bandwidth limits on Linux.
 
 This project is based on [wireguard-go](https://git.zx2c4.com/wireguard-go) by WireGuard LLC.
@@ -11,7 +17,32 @@ This project is based on [wireguard-go](https://git.zx2c4.com/wireguard-go) by W
 - Automatic server setup on Linux: keys, listen port, VPN IP, NAT, IP forwarding
 - Client configs returned as standard WireGuard `.conf` text (base64 keys)
 - Per-user bandwidth limiting via Linux traffic control (`tc` HTB + IFB)
+- Single-device sessions — one active client endpoint per user (endpoint data kept in RAM only)
 - SQLite persistence for users and server key material
+
+## Roadmap
+
+### Completed
+
+- [x] REST management API (create/list/update/delete users, stats, client configs)
+- [x] Automatic Linux server setup (keys, NAT, routing, public endpoint detection)
+- [x] `config.json` with auto-generated API secret and env overrides
+- [x] Per-user bandwidth limits via `tc` HTB + IFB
+- [x] GitHub Actions CI and tagged releases with checksums
+- [x] Single-device enforcement with in-memory endpoint tracking (no client IP on disk)
+
+### Planned
+
+- [ ] TLS / HTTPS for the management API (native or reverse-proxy docs)
+- [ ] Optional web dashboard for user and session management
+- [ ] Prometheus metrics (peers online, traffic, API health)
+- [ ] Per-user expiry and automatic peer disablement
+- [ ] Docker image and compose example for quick deployment
+- [ ] IPv6 in client configs and dual-stack routing (where supported)
+- [ ] API rate limiting and scoped API keys (read-only vs admin)
+- [ ] Windows-friendly management workflow (non-production daemon path)
+
+Contributions and issue reports are welcome — see the items above for good first targets.
 
 ## Requirements
 
@@ -120,7 +151,8 @@ Example (`config.json.example`):
   "out_interface": "",
   "keepalive_interval": 25,
   "db_path": "wireguard-wg0.db",
-  "log_level": "verbose"
+  "log_level": "verbose",
+  "session_idle_seconds": 180
 }
 ```
 
@@ -138,6 +170,7 @@ Example (`config.json.example`):
 | `keepalive_interval` | Client persistent keepalive seconds |
 | `db_path` | SQLite database path |
 | `log_level` | Suggested log level (`verbose`, `error`, …) |
+| `session_idle_seconds` | Idle time before a single-device session can move to another endpoint (default `180`) |
 
 Environment variables still override matching `config.json` fields when set. Do not commit real `config.json` files (contains secrets).
 
@@ -246,6 +279,7 @@ wireguard-go/
 │   ├── config/          # Env configuration
 │   ├── peers/           # Key generation + device peer ops
 │   ├── ratelimit/       # Per-user bandwidth limiting (Linux tc)
+│   ├── session/         # Single-device session monitor (in-memory)
 │   ├── setup/           # Auto iface / NAT / routing setup
 │   └── store/           # SQLite persistence
 └── …

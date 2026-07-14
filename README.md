@@ -29,11 +29,36 @@ cd wireguard-go
 make
 ```
 
-Cross-compile for Linux from another OS:
+Cross-compile for Linux from another OS (requires a C toolchain because of SQLite):
 
 ```bash
-GOOS=linux GOARCH=amd64 go build -o wireguard-go .
+CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o wireguard-go .
 ```
+
+### CI / Releases
+
+GitHub Actions runs automatically:
+
+- **CI** (`.github/workflows/ci.yml`) — tests and builds on every push/PR to `master`/`main`
+- **Release** (`.github/workflows/release.yml`) — on every `v*` tag, builds binaries and uploads them to a GitHub Release
+
+Publish a new version:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+Release assets:
+
+| Asset | Platform |
+|-------|----------|
+| `wireguard-go-vX.Y.Z-linux-amd64` | Linux x86_64 |
+| `wireguard-go-vX.Y.Z-linux-arm64` | Linux ARM64 |
+| `wireguard-go-vX.Y.Z-darwin-amd64` | macOS Intel |
+| `wireguard-go-vX.Y.Z-darwin-arm64` | macOS Apple Silicon |
+
+Each binary ships with a matching `.sha256` checksum file.
 
 ## Quick start
 

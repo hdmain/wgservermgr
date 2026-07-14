@@ -1,0 +1,153 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            cgo: "1"
+          - os: ubuntu-latest
+            goos: linux
+            goarch: arm64
+            cgo: "1"
+            cc: aarch64-linux-gnu-gcc
+            apt: gcc-aarch64-linux-gnu
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+            cgo: "1"
+          - os: macos-latest
+            goos: darwin
+            goarch: amd64
+            cgo: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install Linux cross compiler
+        if: matrix.apt != ''
+        run: sudo apt-get update && sudo apt-get install -y ${{ matrix.apt }}
+
+      - name: Install Linux native toolchain
+        if: runner.os == 'Linux' && matrix.apt == ''
+        run: sudo apt-get update && sudo apt-get install -y build-essential
+
+      - name: Embed release version
+        run: |
+          cat > version.go <<EOF
+          package main
+
+          const Version = "${{ github.ref_name }}"
+          EOF
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: ${{ matrix.cgo }}
+          CC: ${{ matrix.cc }}
+        run: |
+          set -euo pipefail
+          NAME="wireguard-go-${{ github.ref_name }}-${{ matrix.goos }}-${{ matrix.goarch }}"
+          go build -trimpath -ldflags="-s -w" -o "$NAME" .
+          sha256sum "$NAME" > "$NAME.sha256" 2>/dev/null || shasum -a 256 "$NAME" > "$NAME.sha256"
+          ls -lh "$NAME" "$NAME.sha256"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            wireguard-go-${{ github.ref_name }}-${{ matrix.goos }}-${{ matrix.goarch }}
+            wireguard-go-${{ github.ref_name }}-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+
+      - name: List release assets
+        run: ls -lah dist
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          set -euo pipefail
+          TAG="${{ github.ref_name }}"
+          PREV="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)"
+          {
+            echo "## WireGuard Management Server ${TAG}"
+            echo
+            echo "Userspace WireGuard daemon with management API, auto-setup, and per-user bandwidth limits."
+            echo
+            echo "### Downloads"
+            echo
+            echo "| Asset | Platform |"
+            echo "|-------|----------|"
+            echo "| \`wireguard-go-${TAG}-linux-amd64\` | Linux x86_64 |"
+            echo "| \`wireguard-go-${TAG}-linux-arm64\` | Linux ARM64 |"
+            echo "| \`wireguard-go-${TAG}-darwin-amd64\` | macOS Intel |"
+            echo "| \`wireguard-go-${TAG}-darwin-arm64\` | macOS Apple Silicon |"
+            echo
+            echo "### Quick start (Linux)"
+            echo
+            echo '```bash'
+            echo "chmod +x wireguard-go-${TAG}-linux-amd64"
+            echo "sudo LOG_LEVEL=verbose ./wireguard-go-${TAG}-linux-amd64 -f wg0"
+            echo '```'
+            echo
+            if [ -n "$PREV" ]; then
+              echo "### Changes since ${PREV}"
+              echo
+              git log --pretty=format:'- %s (%h)' "${PREV}..${TAG}"
+              echo
+            fi
+          } > release-notes.md
+
+      - name: Create release and upload assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body_path: release-notes.md
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: dist/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

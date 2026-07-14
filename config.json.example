@@ -10,5 +10,6 @@
   "out_interface": "",
   "keepalive_interval": 25,
   "db_path": "wireguard-wg0.db",
-  "log_level": "verbose"
+  "log_level": "verbose",
+  "session_idle_seconds": 180
 }

@@ -3,16 +3,18 @@ package store
 import "time"
 
 type User struct {
-	ID            string    `json:"id"`
-	Name          string    `json:"name"`
-	PublicKey     string    `json:"public_key"`
-	PrivateKey    string    `json:"private_key"`
-	AssignedIP    string    `json:"assigned_ip"`
-	BandwidthMbps int       `json:"bandwidth_mbps"`
-	TCClassID     int       `json:"-"`
-	Enabled       bool      `json:"enabled"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	ID                 string    `json:"id"`
+	Name               string    `json:"name"`
+	PublicKey          string    `json:"public_key"`
+	PrivateKey         string    `json:"private_key"`
+	AssignedIP         string    `json:"assigned_ip"`
+	BandwidthMbps      int       `json:"bandwidth_mbps"`
+	TCClassID          int       `json:"-"`
+	Enabled            bool      `json:"enabled"`
+	LockedEndpoint     string    `json:"locked_endpoint,omitempty"`
+	LockedLastActiveAt time.Time `json:"locked_last_active_at,omitempty"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
 }
 
 type CreateUserInput struct {

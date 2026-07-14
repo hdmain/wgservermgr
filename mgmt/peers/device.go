@@ -5,12 +5,29 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"golang.zx2c4.com/wireguard/device"
 )
 
 type Manager struct {
 	dev *device.Device
+}
+
+type PeerInfo struct {
+	PublicKey         string
+	Endpoint          string
+	TxBytes           uint64
+	RxBytes           uint64
+	LastHandshakeSec  int64
+	LastHandshakeNsec int64
+}
+
+type PeerStats struct {
+	TxBytes           uint64
+	RxBytes           uint64
+	LastHandshakeSec  int64
+	LastHandshakeNsec int64
 }
 
 func NewManager(dev *device.Device) *Manager {
@@ -32,22 +49,34 @@ remove=true
 	return m.dev.IpcSet(config)
 }
 
-type PeerStats struct {
-	TxBytes           uint64
-	RxBytes           uint64
-	LastHandshakeSec  int64
-	LastHandshakeNsec int64
+func (m *Manager) SetPeerEndpoint(publicKey, endpoint string) error {
+	config := fmt.Sprintf(`public_key=%s
+update_only=true
+endpoint=%s
+`, publicKey, endpoint)
+	return m.dev.IpcSet(config)
 }
 
-func (m *Manager) PeerStats(publicKey string) (PeerStats, error) {
+func (m *Manager) GetPeer(publicKey string) (PeerInfo, error) {
+	peers, err := m.ListPeers()
+	if err != nil {
+		return PeerInfo{}, err
+	}
+	peer, ok := peers[publicKey]
+	if !ok {
+		return PeerInfo{}, fmt.Errorf("peer %s not found", publicKey)
+	}
+	return peer, nil
+}
+
+func (m *Manager) ListPeers() (map[string]PeerInfo, error) {
 	body, err := m.dev.IpcGet()
 	if err != nil {
-		return PeerStats{}, err
+		return nil, err
 	}
 
-	var stats PeerStats
-	var currentKey string
-	found := false
+	peers := make(map[string]PeerInfo)
+	var current *PeerInfo
 
 	scanner := bufio.NewScanner(strings.NewReader(body))
 	for scanner.Scan() {
@@ -57,30 +86,64 @@ func (m *Manager) PeerStats(publicKey string) (PeerStats, error) {
 		}
 		switch key {
 		case "public_key":
-			currentKey = value
-			found = currentKey == publicKey
+			if current != nil && current.PublicKey != "" {
+				peers[current.PublicKey] = *current
+			}
+			current = &PeerInfo{PublicKey: value}
+		case "endpoint":
+			if current != nil {
+				current.Endpoint = value
+			}
 		case "tx_bytes":
-			if found {
-				stats.TxBytes, _ = strconv.ParseUint(value, 10, 64)
+			if current != nil {
+				current.TxBytes, _ = strconv.ParseUint(value, 10, 64)
 			}
 		case "rx_bytes":
-			if found {
-				stats.RxBytes, _ = strconv.ParseUint(value, 10, 64)
+			if current != nil {
+				current.RxBytes, _ = strconv.ParseUint(value, 10, 64)
 			}
 		case "last_handshake_time_sec":
-			if found {
-				stats.LastHandshakeSec, _ = strconv.ParseInt(value, 10, 64)
+			if current != nil {
+				current.LastHandshakeSec, _ = strconv.ParseInt(value, 10, 64)
 			}
 		case "last_handshake_time_nsec":
-			if found {
-				stats.LastHandshakeNsec, _ = strconv.ParseInt(value, 10, 64)
+			if current != nil {
+				current.LastHandshakeNsec, _ = strconv.ParseInt(value, 10, 64)
 			}
 		}
 	}
-	if !found {
-		return PeerStats{}, fmt.Errorf("peer %s not found", publicKey)
+	if current != nil && current.PublicKey != "" {
+		peers[current.PublicKey] = *current
 	}
-	return stats, scanner.Err()
+	return peers, scanner.Err()
+}
+
+func (m *Manager) PeerStats(publicKey string) (PeerStats, error) {
+	info, err := m.GetPeer(publicKey)
+	if err != nil {
+		return PeerStats{}, err
+	}
+	return PeerStats{
+		TxBytes:           info.TxBytes,
+		RxBytes:           info.RxBytes,
+		LastHandshakeSec:  info.LastHandshakeSec,
+		LastHandshakeNsec: info.LastHandshakeNsec,
+	}, nil
+}
+
+func (info PeerInfo) LastHandshake() time.Time {
+	if info.LastHandshakeSec == 0 && info.LastHandshakeNsec == 0 {
+		return time.Time{}
+	}
+	return time.Unix(info.LastHandshakeSec, info.LastHandshakeNsec)
+}
+
+func (info PeerInfo) HasRecentHandshake(idle time.Duration) bool {
+	hs := info.LastHandshake()
+	if hs.IsZero() {
+		return false
+	}
+	return time.Since(hs) <= idle
 }
 
 func ServerPublicKey(dev *device.Device) (string, error) {

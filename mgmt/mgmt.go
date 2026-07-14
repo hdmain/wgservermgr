@@ -9,6 +9,7 @@ import (
 	"golang.zx2c4.com/wireguard/mgmt/config"
 	"golang.zx2c4.com/wireguard/mgmt/peers"
 	"golang.zx2c4.com/wireguard/mgmt/ratelimit"
+	"golang.zx2c4.com/wireguard/mgmt/session"
 	"golang.zx2c4.com/wireguard/mgmt/setup"
 	"golang.zx2c4.com/wireguard/mgmt/store"
 )
@@ -55,11 +56,14 @@ func Start(dev *device.Device, iface string, logger *device.Logger) error {
 		}
 	}
 
+	session.Start(pm, st, logger, cfg.SessionIdleSeconds)
+
 	logger.Errorf("Management API listening on http://0.0.0.0:%d", cfg.APIPort)
 	fmt.Fprintf(os.Stderr, "wireguard-go: management API listening on :%d\n", cfg.APIPort)
 	if cfg.APIKey != "" {
 		fmt.Fprintf(os.Stderr, "wireguard-go: use header X-API-Key: %s\n", cfg.APIKey)
 	}
+	fmt.Fprintf(os.Stderr, "wireguard-go: single-device sessions enabled (idle %ds)\n", cfg.SessionIdleSeconds)
 	server := api.New(cfg, st, pm, limiter)
 	return server.Run()
 }

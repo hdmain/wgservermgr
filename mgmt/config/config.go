@@ -26,8 +26,9 @@ type FileConfig struct {
 	DNS               string `json:"dns"`
 	OutInterface      string `json:"out_interface"`
 	KeepaliveInterval int    `json:"keepalive_interval"`
-	DBPath            string `json:"db_path"`
-	LogLevel          string `json:"log_level"`
+	DBPath             string `json:"db_path"`
+	LogLevel             string `json:"log_level"`
+	SessionIdleSeconds   int    `json:"session_idle_seconds"`
 }
 
 type Config struct {
@@ -42,9 +43,10 @@ type Config struct {
 	APIPort           int
 	APIKey            string
 	DBPath            string
-	KeepaliveInterval int
-	LogLevel          string
-	ConfigPath        string
+	KeepaliveInterval  int
+	SessionIdleSeconds int
+	LogLevel           string
+	ConfigPath         string
 }
 
 func Enabled() bool {
@@ -114,6 +116,17 @@ func Load(iface string) (*Config, error) {
 		}
 	}
 
+	sessionIdle := file.SessionIdleSeconds
+	if sessionIdle == 0 {
+		sessionIdle = 180
+	}
+	if v := os.Getenv("WG_SESSION_IDLE_SECONDS"); v != "" {
+		sessionIdle, err = strconv.Atoi(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid WG_SESSION_IDLE_SECONDS: %w", err)
+		}
+	}
+
 	dbPath := firstNonEmpty(os.Getenv("DB_PATH"), file.DBPath, fmt.Sprintf("wireguard-%s.db", iface))
 	secret := firstNonEmpty(os.Getenv("API_KEY"), file.SecretKey)
 
@@ -129,9 +142,10 @@ func Load(iface string) (*Config, error) {
 		APIPort:           apiPort,
 		APIKey:            secret,
 		DBPath:            dbPath,
-		KeepaliveInterval: keepalive,
-		LogLevel:          firstNonEmpty(os.Getenv("LOG_LEVEL"), file.LogLevel),
-		ConfigPath:        path,
+		KeepaliveInterval:  keepalive,
+		SessionIdleSeconds: sessionIdle,
+		LogLevel:           firstNonEmpty(os.Getenv("LOG_LEVEL"), file.LogLevel),
+		ConfigPath:         path,
 	}
 
 	return cfg, nil
@@ -185,8 +199,9 @@ func loadOrCreateFile(path, iface string) (*FileConfig, bool, error) {
 		DNS:               "1.1.1.1",
 		OutInterface:      "",
 		KeepaliveInterval: 25,
-		DBPath:            fmt.Sprintf("wireguard-%s.db", iface),
-		LogLevel:          "verbose",
+		DBPath:             fmt.Sprintf("wireguard-%s.db", iface),
+		LogLevel:             "verbose",
+		SessionIdleSeconds:   180,
 	}
 	if err := saveFile(path, file); err != nil {
 		return nil, false, err
@@ -218,6 +233,9 @@ func applyFileDefaults(file *FileConfig, iface string) {
 	}
 	if file.DBPath == "" {
 		file.DBPath = fmt.Sprintf("wireguard-%s.db", iface)
+	}
+	if file.SessionIdleSeconds == 0 {
+		file.SessionIdleSeconds = 180
 	}
 }
 
